@@ -2,6 +2,12 @@ import { defineStore } from 'pinia'
 import { SPHEngine, DEFAULT_PARAMS, PRESETS } from '../utils/sph-engine'
 import type { SimParams, Preset, Particle } from '../types'
 
+interface PerfSample {
+  particleCount: number
+  fps: number
+  timestamp: number
+}
+
 export const useFluidStore = defineStore('fluid', {
   state: () => ({
     engine: null as SPHEngine | null,
@@ -15,6 +21,9 @@ export const useFluidStore = defineStore('fluid', {
     _lastTime: 0,
     _fpsAccum: 0,
     _fpsFrames: 0,
+    _perfHistory: [] as PerfSample[],
+    _baselineFps: 60,
+    _baselineParticles: 800,
   }),
   getters: {
     particleArray: (state) => state.engine?.particles ?? [],
@@ -26,6 +35,33 @@ export const useFluidStore = defineStore('fluid', {
     maxVelocity: (state) => {
       if (!state.engine || state.engine.particles.length === 0) return 0
       return Math.max(...state.engine.particles.map(p => Math.sqrt(p.vx * p.vx + p.vy * p.vy)))
+    },
+    estimatedFps: (state) => {
+      const n = state.particleCount
+      if (state._perfHistory.length > 0) {
+        const recent = state._perfHistory.slice(-20)
+        let sumFpsN = 0
+        for (const s of recent) {
+          sumFpsN += s.fps * s.particleCount
+        }
+        const avgFpsN = sumFpsN / recent.length
+        return Math.min(60, Math.max(1, avgFpsN / n))
+      }
+      const perfConstant = state._baselineFps * state._baselineParticles
+      return Math.min(60, Math.max(1, perfConstant / n))
+    },
+    performanceLevel: (state, getters) => {
+      const fps = getters.estimatedFps
+      if (fps >= 50) return { level: 'excellent', label: '流畅', color: 'text-green-400' }
+      if (fps >= 30) return { level: 'good', label: '良好', color: 'text-blue-400' }
+      if (fps >= 20) return { level: 'fair', label: '一般', color: 'text-yellow-400' }
+      return { level: 'poor', label: '卡顿', color: 'text-red-400' }
+    },
+    perfImpactPercent: (state, getters) => {
+      const currentParticles = state.engine?.particles.length ?? state._baselineParticles
+      const diff = state.particleCount - currentParticles
+      if (diff === 0) return 0
+      return Math.round((diff / currentParticles) * 100)
     },
   },
   actions: {
@@ -40,6 +76,9 @@ export const useFluidStore = defineStore('fluid', {
       this.engine.initParticles(this.currentPreset.initialConfig, this.particleCount)
       this.frameCount = 0
       this.fps = 0
+      if (this._perfHistory.length === 0) {
+        this._baselineParticles = this.particleCount
+      }
     },
     start() {
       if (this.isRunning || !this.engine) return
@@ -55,6 +94,7 @@ export const useFluidStore = defineStore('fluid', {
         this._fpsFrames++
         if (this._fpsAccum >= 500) {
           this.fps = Math.round(this._fpsFrames / (this._fpsAccum / 1000))
+          this._recordPerfSample()
           this._fpsAccum = 0
           this._fpsFrames = 0
         }
@@ -94,6 +134,22 @@ export const useFluidStore = defineStore('fluid', {
         if (key === 'smoothingRadius') {
           this.engine['cellSize'] = value
         }
+      }
+    },
+    _recordPerfSample() {
+      if (!this.engine || this.fps <= 0) return
+      const n = this.engine.particles.length
+      this._perfHistory.push({
+        particleCount: n,
+        fps: this.fps,
+        timestamp: Date.now(),
+      })
+      if (this._perfHistory.length > 50) {
+        this._perfHistory = this._perfHistory.slice(-50)
+      }
+      if (this._perfHistory.length === 1) {
+        this._baselineFps = this.fps
+        this._baselineParticles = n
       }
     },
   },

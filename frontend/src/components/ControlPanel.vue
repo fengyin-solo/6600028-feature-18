@@ -143,7 +143,25 @@ function onDt(e: Event) {
           @input="onParticleCount"
           class="w-full accent-blue-500 h-1.5"
         />
-        <p class="text-xs text-gray-600 mt-0.5">重置后生效</p>
+        <div class="mt-2 bg-gray-900 rounded px-2.5 py-2">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-gray-500">预估性能</span>
+            <span :class="store.performanceLevel.color" class="font-medium">
+              {{ store.performanceLevel.label }}
+            </span>
+          </div>
+          <div class="flex justify-between items-center mt-1 text-xs">
+            <span class="text-gray-500">预估 FPS</span>
+            <span class="text-gray-300 font-mono">{{ Math.round(store.estimatedFps) }}</span>
+          </div>
+          <div class="flex justify-between items-center mt-1 text-xs">
+            <span class="text-gray-500">相对变化</span>
+            <span :class="store.perfImpactPercent > 0 ? 'text-red-400' : store.perfImpactPercent < 0 ? 'text-green-400' : 'text-gray-500'">
+              {{ store.perfImpactPercent > 0 ? '+' : '' }}{{ store.perfImpactPercent }}%
+            </span>
+          </div>
+        </div>
+        <p class="text-xs text-gray-600 mt-1.5">重置后生效 · 基于当前运行数据预估</p>
       </div>
 
       <div>
